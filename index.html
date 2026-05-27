@@ -964,6 +964,9 @@ async function clearAllData() {
   log('All data cleared from Firebase.', 'warn');
 }
 
+function getSubjectFromRows(rows) {
+  return 'Transportation Invoice';
+}
 
 // ── Day View ──
 function initDayView() {
