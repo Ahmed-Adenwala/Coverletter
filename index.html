@@ -1423,7 +1423,6 @@ function generatePDF() {
   doc.setFont('times','normal');
   doc.setFontSize(11);
   doc.text('Dear Sir/Madam,', lm, y); y += 6;
-  doc.text('SUB:    ORIGINAL INVOICE', lm, y, { maxWidth: pw }); y += 10;
 
   const tableBody = selectedRows.map((r, i) => [
     String(i+1),
