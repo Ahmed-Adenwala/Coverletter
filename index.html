@@ -3,10 +3,38 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Suraj Forwarders – Invoice Register</title>
+<title>SRCC – Invoice Register</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<!-- Firebase SDKs (Realtime Database) -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+  import { getDatabase, ref, set, get, child } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCMfGog8beSqdpnzGkmTjNSijvjbXxrC3g",
+    authDomain: "srcc-b4fce.firebaseapp.com",
+    databaseURL: "https://srcc-b4fce-default-rtdb.firebaseio.com",
+    projectId: "srcc-b4fce",
+    storageBucket: "srcc-b4fce.firebasestorage.app",
+    messagingSenderId: "220739680630",
+    appId: "1:220739680630:web:6ac8f171aef1ac87816257"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const rtdb = getDatabase(app);
+
+  window._rtdb = {
+    ref: (path) => ref(rtdb, path),
+    set,
+    get,
+    child
+  };
+
+  window._firebaseReady = true;
+  document.dispatchEvent(new Event('firebase-ready'));
+</script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
 
@@ -114,7 +142,6 @@
   .page { display: none; padding: 32px; max-width: 1200px; }
   .page.active { display: block; }
 
-  /* ── Upload Page ── */
   .upload-zone {
     border: 2px dashed var(--border);
     background: var(--surface);
@@ -226,8 +253,21 @@
     overflow-y: auto;
   }
 
-  .suggestion-item { padding: 8px 14px; cursor: pointer; font-size: 13px; transition: background 0.15s; }
+  .suggestion-item {
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+  }
   .suggestion-item:hover { background: #2a2a2a; color: var(--accent); }
+  /* ── NEW: keyboard highlight style ── */
+  .suggestion-item.highlighted {
+    background: #2e2518;
+    color: var(--accent);
+    border-left: 2px solid var(--accent);
+    padding-left: 12px;
+  }
+
   .relative { position: relative; }
 
   .btn {
@@ -307,7 +347,6 @@
   .party-group-header .count { font-family: var(--mono); font-size: 11px; color: var(--muted); }
   .party-group table { border-radius: 0; border: 1px solid var(--border); border-top: none; }
 
-  /* Step blocks */
   .step-block { margin-bottom: 28px; }
   .step-label {
     display: flex;
@@ -333,7 +372,6 @@
     flex-shrink: 0;
   }
 
-  /* Party & KA management panel */
   .modal-overlay {
     position: fixed; inset: 0;
     background: rgba(0,0,0,0.75);
@@ -409,7 +447,46 @@
   .done-row td { opacity: 0.4; }
   .done-badge { font-family: var(--mono); font-size: 10px; color: #7070b0; background: #1a1a2e; padding: 2px 7px; border-radius: 2px; }
 
-  /* Address print area (hidden in UI, printed via window.print) */
+  /* ── NEW: Address Preview Box ── */
+/* ── Address Preview Box ── */
+  .addr-preview-box {
+    margin-left: 10px;
+    background: #141a17;
+    border: 1px solid #2a3d32;
+    border-left: 3px solid var(--accent2);
+    border-radius: 3px;
+    padding: 2px 4px;
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text);
+    white-space: pre-wrap;
+    width: 220px;
+    max-height: 90px;
+    overflow-y: auto;
+    flex-shrink: 0;
+    align-self: flex-start;
+    transition: border-color 0.2s;
+    display: none;
+  }
+
+  .addr-preview-box.visible { display: block; }
+  .addr-preview-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--accent2);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .addr-preview-label::before {
+    content: '📬';
+    font-size: 10px;
+  }
+
   @media print {
     body > *:not(#addr-print-area) { display: none !important; }
     #addr-print-area { display: block !important; }
@@ -420,16 +497,15 @@
 <body>
 
 <header>
-  <div class="logo-mark">SF</div>
+  <div class="logo-mark">SR</div>
   <div>
-    <h1>Suraj Forwarders – Invoice Register</h1>
+    <h1>SRCC – Invoice Register</h1>
     <p>Daily Sales Register · Cover Letter Generator</p>
   </div>
   <div class="badge">Records: <span id="total-count">0</span></div>
-  <div style="display:flex; gap:8px; margin-left:12px;">
-    <button class="btn btn-ghost btn-sm" onclick="saveDataFile()" title="Save all data to a file on your PC" style="padding:7px 14px; font-size:12px; border-color:#5a9c7a; color:#5a9c7a;">💾 Save Data</button>
-    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('load-data-input').click()" title="Load data file from your PC" style="padding:7px 14px; font-size:12px; border-color:#c8a96e; color:#c8a96e;">📂 Load Data</button>
-    <input type="file" id="load-data-input" accept=".json" style="display:none;" onchange="loadDataFile(event)">
+  <div style="display:flex; align-items:center; gap:8px; margin-left:12px; background:var(--surface2); border:1px solid var(--border); border-radius:3px; padding:6px 14px;">
+    <span id="sync-dot" style="width:9px;height:9px;border-radius:50%;background:#555;display:inline-block;flex-shrink:0;"></span>
+    <span id="sync-label" style="font-family:var(--mono);font-size:11px;color:var(--muted);">Connecting…</span>
   </div>
 </header>
 
@@ -467,7 +543,7 @@
   </div>
 
   <div style="display:flex; gap:12px; margin-top: 8px;">
-    <button class="btn btn-outline" onclick="exportData()">⬇ Export All Data (JSON backup)</button>
+    <button class="btn btn-outline" onclick="exportData()">⬇ Download Backup (JSON)</button>
     <button class="btn btn-danger btn-sm" onclick="clearAllData()">🗑 Clear All Data</button>
   </div>
 </div>
@@ -508,7 +584,12 @@
     <div class="search-bar">
       <div class="field-group relative">
         <label>Party Name</label>
-        <input type="text" id="search-party" placeholder="e.g. INVENTA SYSTEMS" oninput="onPartyInput()" onblur="hideSuggestions()" autocomplete="off">
+        <input type="text" id="search-party"
+          placeholder="e.g. INVENTA SYSTEMS"
+          oninput="onPartyInput()"
+          onblur="hideSuggestions()"
+          onkeydown="onPartyKeyDown(event)"
+          autocomplete="off">
         <div class="suggestions" id="suggestions" style="display:none;"></div>
       </div>
       <div class="field-group">
@@ -522,6 +603,16 @@
       <button class="btn btn-accent" onclick="doSearch()">Search</button>
       <button class="btn btn-outline" onclick="resetAll()">Clear</button>
     </div>
+  </div>
+
+  <!-- Party notes reminder banner -->
+  <div id="party-notes-banner" style="display:none; margin-bottom:20px; background:#1e1608; border:1px solid #c8a96e55; border-left:3px solid var(--accent); border-radius:3px; padding:11px 16px; display:flex; align-items:flex-start; gap:10px;">
+    <span style="font-size:16px; flex-shrink:0;">📌</span>
+    <div>
+      <div style="font-family:var(--mono); font-size:10px; color:var(--accent); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:4px;">Party Instructions</div>
+      <div id="party-notes-text" style="font-size:13px; color:var(--text); line-height:1.6;"></div>
+    </div>
+    <button onclick="document.getElementById('party-notes-banner').style.display='none';" style="margin-left:auto; background:none; border:none; color:var(--muted); cursor:pointer; font-size:16px; flex-shrink:0; padding:0 4px;">×</button>
   </div>
 
   <!-- STEP 2 -->
@@ -541,20 +632,29 @@
   <div class="step-block" id="step3-block" style="display:none;">
     <div class="step-label"><span class="step-num">3</span> Kind Attention &amp; Print PDF</div>
     <div>
-      <div style="display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap;">
-        <div class="field-group relative" style="flex:1; min-width:280px;">
+<div style="display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap;">
+        <div class="field-group relative" style="flex:1; min-width:240px;">
           <label>Kind Attention (Contact Name)</label>
           <input type="text" id="cl-attn" placeholder="e.g. MR. Priyank Shah" style="width:100%;" oninput="onAttnInput()" onblur="hideAttnSuggestions()" autocomplete="off">
           <div class="suggestions" id="attn-suggestions" style="display:none; width:100%;"></div>
         </div>
-        <div class="field-group" style="flex:1; min-width:200px;">
+
+        <!-- ── Address field + preview side by side ── -->
+        <div class="field-group" style="flex:1; min-width:240px;">
           <label>Party Address (for envelope)</label>
           <div class="pill-row" id="addr-pills"></div>
-          <select id="addr-select" style="width:100%; font-size:12px;">
-            <option value="">— select address —</option>
-          </select>
+          <div style="display:flex; align-items:flex-start;">
+            <select id="addr-select" style="flex:1; font-size:12px;" onchange="updateAddrPreview()">
+              <option value="">— select address —</option>
+            </select>
+            <!-- Preview sits to the right of the dropdown -->
+            <div class="addr-preview-box" id="addr-preview-box">
+              <div id="addr-preview-text"></div>
+            </div>
+          </div>
         </div>
       </div>
+      
 
       <div style="display:flex; gap:12px; margin-top:18px; flex-wrap:wrap;">
         <button class="btn btn-accent" style="padding:10px 28px; font-size:14px;" onclick="generatePDF()">🖨 Generate Cover Letter PDF</button>
@@ -581,7 +681,7 @@
   <div id="party-book-list"></div>
 </div>
 
-<!-- ── MODAL for editing party KA & address ── -->
+<!-- ── MODAL ── -->
 <div class="modal-overlay hidden" id="modal-overlay" onclick="closeModal(event)">
   <div class="modal-box" onclick="event.stopPropagation()">
     <h2 id="modal-title">Party Settings</h2>
@@ -601,6 +701,11 @@
       <button class="btn btn-ghost btn-sm" onclick="addAddr()">+ Add Address</button>
     </div>
 
+    <div class="ka-section-label">Instructions / Reminders for this Party</div>
+    <textarea id="modal-notes-input"
+      placeholder="e.g. Send invoice in A4 sized cover only. Also email a copy to accounts@abc.com"
+      style="min-height:70px; margin-bottom:20px;"></textarea>
+
     <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:8px;">
       <button class="btn btn-accent" onclick="saveModal()">Save</button>
       <button class="btn btn-outline" onclick="closeModalDirect()">Cancel</button>
@@ -608,46 +713,116 @@
   </div>
 </div>
 
-<!-- Address print area -->
 <div id="addr-print-area"></div>
-
 <iframe id="print-frame" style="position:fixed;width:0;height:0;border:none;left:-9999px;top:-9999px;"></iframe>
 
 <script>
 // ── State ──
 let DB = [];
-let PARTY_BOOK = {}; // { PARTY_NAME: { ka: [...], addr: [...] } }
-let DONE_SET = new Set(); // vchNo strings that have been generated
-const STORAGE_KEY = 'sf_invoice_db';
-const PB_KEY = 'sf_party_book';
-const DONE_KEY = 'sf_done_set';
-
+let PARTY_BOOK = {};
+let DONE_SET = new Set();
 let searchResults = [];
-let currentSearchParty = null; // exact party name from DB records
+let currentSearchParty = null;
 let currentModalParty = null;
 let modalKATemp = [];
 let modalAddrTemp = [];
 
-// ── Persist / Load (File-based — saves to your PC, not browser) ──
-// These are in-memory only; data is saved/loaded via JSON file on your PC.
-function saveDB() { /* in-memory only; use 💾 Save Data button to save to PC */ }
-function savePB() { /* in-memory only; use 💾 Save Data button to save to PC */ }
-function saveDone() { /* in-memory only; use 💾 Save Data button to save to PC */ }
+// ── NEW: Keyboard navigation state for party suggestions ──
+let suggestionList = [];
+let suggestionHighlight = -1;
 
-function loadAll() {
-  // On fresh open, start empty — user must click "📂 Load Data" to restore from their PC file
-  DB = [];
-  PARTY_BOOK = {};
-  DONE_SET = new Set();
-  updateStats();
-  // Show hint in upload log after page loads
-  setTimeout(() => {
-    log('👋 Welcome! Click "📂 Load Data" (top right) to restore your saved data from your PC.', 'warn');
-    log('After any changes, click "💾 Save Data" to save back to your PC file.', 'warn');
-  }, 200);
+// ── Sync Status ──
+function setSyncStatus(state) {
+  const dot = document.getElementById('sync-dot');
+  const lbl = document.getElementById('sync-label');
+  if (!dot || !lbl) return;
+  const map = {
+    connecting: { color: '#888',     text: 'Connecting…' },
+    synced:     { color: '#5a9c7a',  text: '● Cloud Synced' },
+    saving:     { color: '#c8a96e',  text: '↑ Saving…' },
+    error:      { color: '#c46a5a',  text: '⚠ Sync Error' }
+  };
+  const s = map[state] || map.connecting;
+  dot.style.background = s.color;
+  lbl.textContent = s.text;
+  lbl.style.color = s.color;
 }
 
-// ── Save all data as a JSON file to PC ──
+async function rtdbSet(path, data) {
+  setSyncStatus('saving');
+  try {
+    await window._rtdb.set(window._rtdb.ref(path), data);
+    setSyncStatus('synced');
+  } catch(e) {
+    console.error('RTDB write error:', e);
+    setSyncStatus('error');
+    throw e;
+  }
+}
+
+async function rtdbGet(path) {
+  const snapshot = await window._rtdb.get(window._rtdb.ref(path));
+  return snapshot.exists() ? snapshot.val() : null;
+}
+
+async function saveDB() {
+  await rtdbSet('sf_data/invoice_db', { records: DB, _updated: new Date().toISOString() });
+}
+
+async function savePB() {
+  const payload = JSON.stringify(PARTY_BOOK);
+  await rtdbSet('sf_data/party_book', { data: payload, _updated: new Date().toISOString() });
+}
+
+async function saveDone() {
+  await rtdbSet('sf_data/done_set', { vchNos: [...DONE_SET], _updated: new Date().toISOString() });
+}
+
+async function loadAll() {
+  setSyncStatus('connecting');
+  if (!window._firebaseReady) {
+    await new Promise(resolve => document.addEventListener('firebase-ready', resolve, { once: true }));
+  }
+  try {
+    const dbData   = await rtdbGet('sf_data/invoice_db');
+    const pbData   = await rtdbGet('sf_data/party_book');
+    const doneData = await rtdbGet('sf_data/done_set');
+
+    DB       = dbData   ? (dbData.records   || []) : [];
+    DONE_SET = new Set(doneData ? (doneData.vchNos || []) : []);
+
+    if (pbData && typeof pbData.data === 'string') {
+      try { PARTY_BOOK = JSON.parse(pbData.data); } catch(e) { PARTY_BOOK = {}; }
+    } else {
+      PARTY_BOOK = pbData ? (pbData.data || {}) : {};
+    }
+
+    Object.keys(PARTY_BOOK).forEach(p => {
+      if (!PARTY_BOOK[p].ka) PARTY_BOOK[p].ka = [];
+      if (!PARTY_BOOK[p].addr) PARTY_BOOK[p].addr = [];
+      if (PARTY_BOOK[p].notes === undefined) PARTY_BOOK[p].notes = '';
+    });
+
+    updateStats();
+    setSyncStatus('synced');
+
+    const recCount = DB.length;
+    const pbCount  = Object.keys(PARTY_BOOK).length;
+    if (recCount > 0 || pbCount > 0) {
+      log(`☁ Loaded from Firebase: ${recCount} invoice records, ${pbCount} parties.`, 'ok');
+    } else {
+      log('☁ Connected to Firebase. No data yet — upload your first Excel file above.', 'warn');
+    }
+    renderPartyBook && renderPartyBook();
+  } catch(e) {
+    console.error('Firebase load error:', e);
+    setSyncStatus('error');
+    log('⚠ Could not connect to Firebase: ' + e.message, 'err');
+    DB = []; PARTY_BOOK = {}; DONE_SET = new Set();
+    updateStats();
+  }
+}
+
 function saveDataFile() {
   const payload = {
     _version: 1,
@@ -659,37 +834,12 @@ function saveDataFile() {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'suraj_forwarders_data.json';
+  a.download = 'suraj_forwarders_backup.json';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  log('✅ Data saved! File: suraj_forwarders_data.json — keep it safe on your PC.', 'ok');
+  log('✅ Backup file downloaded.', 'ok');
 }
 
-// ── Load data from a JSON file on PC ──
-function loadDataFile(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const payload = JSON.parse(e.target.result);
-      if (!payload.db || !Array.isArray(payload.db)) { alert('Invalid data file. Please select the correct suraj_forwarders_data.json file.'); return; }
-      DB = payload.db || [];
-      PARTY_BOOK = payload.partyBook || {};
-      DONE_SET = new Set(payload.doneSet || []);
-      updateStats();
-      log(`✅ Data loaded! ${DB.length} invoice records, ${Object.keys(PARTY_BOOK).length} parties restored.`, 'ok');
-      renderPartyBook && renderPartyBook();
-    } catch(err) {
-      alert('Could not read file: ' + err.message);
-    }
-  };
-  reader.readAsText(file);
-  // Reset input so same file can be reloaded if needed
-  event.target.value = '';
-}
-
-// ── Navigation ──
 function showPage(name, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -699,7 +849,6 @@ function showPage(name, btn) {
   if (name === 'partybook') renderPartyBook();
 }
 
-// ── Upload ──
 const dropZone = document.getElementById('drop-zone');
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
@@ -720,7 +869,7 @@ function handleFile(file) {
   const reader = new FileReader();
   reader.onload = e => {
     try {
-      const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+      const wb = XLSX.read(e.target.result, { type: 'array', cellDates: false });
       const sheetName = wb.SheetNames.find(n => n.toLowerCase().includes('sales')) || wb.SheetNames[0];
       log(`Found sheet: "${sheetName}"`, 'ok');
       const ws = wb.Sheets[sheetName];
@@ -760,16 +909,14 @@ function handleFile(file) {
         if (!party || !vchNo || party === 'Particulars' || vchNo === 'Vch No.' || party.toLowerCase().startsWith('total')) { badRows++; continue; }
 
         let dateStr = '';
-        if (dateRaw instanceof Date) {
-          const y = dateRaw.getFullYear();
-          const m = String(dateRaw.getMonth() + 1).padStart(2, '0');
-          const d = String(dateRaw.getDate()).padStart(2, '0');
-          dateStr = `${y}-${m}-${d}`;
+        if (typeof dateRaw === 'string' && dateRaw.trim().length >= 8) {
+          const parts = dateRaw.trim().split('/');
+          if (parts.length === 3) {
+            dateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
+          }
         } else if (typeof dateRaw === 'number' && dateRaw > 40000) {
-          const d = new Date((dateRaw - 25569) * 86400 * 1000);
-          dateStr = d.toISOString().slice(0, 10);
-        } else if (typeof dateRaw === 'string' && dateRaw.length >= 8) {
-          dateStr = dateRaw.slice(0, 10);
+          const d = new Date(Math.round((dateRaw - 25569) * 86400) * 1000);
+          dateStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
         }
 
         if (!dateStr || dateStr < '2000-01-01') { badRows++; continue; }
@@ -781,7 +928,7 @@ function handleFile(file) {
       }
 
       log(`Done: +${added} new records | ${skipped} duplicates skipped | ${badRows} non-data rows ignored`, added > 0 ? 'ok' : 'warn');
-      if (added > 0) log('💡 Remember to click "💾 Save Data" (top right) to save your updated data to your PC!', 'warn');
+      if (added > 0) log('☁ Saving…', 'warn');
       saveDB();
       updateStats();
     } catch(err) {
@@ -806,39 +953,25 @@ function updateStats() {
   document.getElementById('total-count').textContent = total;
 }
 
-function exportData() {
-  saveDataFile();
-}
+function exportData() { saveDataFile(); }
 
-function clearAllData() {
-  if (!confirm('Clear ALL stored records? This cannot be undone.')) return;
+async function clearAllData() {
+  if (!confirm('Clear ALL stored records from Firebase? This cannot be undone.')) return;
   DB = []; DONE_SET = new Set();
-  saveDB(); saveDone();
+  await saveDB();
+  await saveDone();
   updateStats();
-  log('All data cleared.', 'warn');
+  log('All data cleared from Firebase.', 'warn');
 }
 
-// ── SUBJECT LINE LOGIC ──
-// If vchNo contains "I" → Import, "E" → Export, both → Import & Export, neither → Misc
 function getSubjectFromRows(rows) {
-  let hasI = false, hasE = false;
-  rows.forEach(r => {
-    const no = r.vchNo.toUpperCase();
-    // Look for standalone I or E in the voucher number (typical pattern like SFIG-001 / SFEG-001)
-    if (/I/.test(no)) hasI = true;
-    if (/E/.test(no)) hasE = true;
-  });
-  if (hasI && hasE) return 'IMPORT & EXPORT CLEARANCE INVOICE';
-  if (hasI) return 'IMPORT CLEARANCE INVOICE';
-  if (hasE) return 'EXPORT CLEARANCE INVOICE';
-  return 'MISC INVOICE';
+  return 'Transportation Invoice';
 }
 
-// ── Day View (Pending Invoices) ──
+// ── Day View ──
 function initDayView() {
   const dateInput = document.getElementById('day-date');
   if (!dateInput.value) {
-    // Default to earliest date with pending invoices
     const pendingDates = [...new Set(DB.filter(r => !DONE_SET.has(r.vchNo)).map(r=>r.date))].sort();
     dateInput.value = pendingDates[0] || DB.map(r=>r.date).sort().pop() || new Date().toISOString().slice(0,10);
   }
@@ -895,7 +1028,6 @@ function renderDayView() {
     });
     html += `</tbody></table></div></div>`;
   });
-
   content.innerHTML = html;
 }
 
@@ -920,63 +1052,197 @@ function nextDate() {
 }
 
 // ── Cover Letter Search ──
+
+// ── NEW: Render suggestions with keyboard highlight support ──
+function renderSuggestions(parties) {
+  const box = document.getElementById('suggestions');
+  suggestionList = parties;
+  suggestionHighlight = -1;
+  if (!parties.length) { box.style.display = 'none'; return; }
+  box.innerHTML = parties.map((p, i) =>
+    `<div class="suggestion-item" data-idx="${i}"
+      onmousedown="selectSuggestion('${p.replace(/'/g,"\\'")}')"
+      onmouseover="highlightSuggestion(${i})"
+    >${p}</div>`
+  ).join('');
+  box.style.display = 'block';
+}
+
+function highlightSuggestion(idx) {
+  suggestionHighlight = idx;
+  document.querySelectorAll('#suggestions .suggestion-item').forEach((el, i) => {
+    el.classList.toggle('highlighted', i === idx);
+  });
+  const highlighted = document.querySelector('#suggestions .suggestion-item.highlighted');
+  if (highlighted) highlighted.scrollIntoView({ block: 'nearest' });
+}
+
 function onPartyInput() {
   const val = document.getElementById('search-party').value.trim().toUpperCase();
-  const box = document.getElementById('suggestions');
-  if (val.length < 2) { box.style.display = 'none'; return; }
+  if (val.length < 2) {
+    document.getElementById('suggestions').style.display = 'none';
+    suggestionList = [];
+    suggestionHighlight = -1;
+    return;
+  }
   const parties = [...new Set(DB.map(r => r.party))].filter(p => p.toUpperCase().includes(val)).slice(0, 8);
-  if (!parties.length) { box.style.display = 'none'; return; }
-  box.innerHTML = parties.map(p => `<div class="suggestion-item" onmousedown="selectSuggestion('${p.replace(/'/g,"\\'")}')">${p}</div>`).join('');
-  box.style.display = 'block';
+  renderSuggestions(parties);
+}
+
+// ── Keyboard navigation for party suggestions ──
+function onPartyKeyDown(e) {
+  const box = document.getElementById('suggestions');
+  const isOpen = box.style.display !== 'none' && suggestionList.length > 0;
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (!isOpen) return;
+    const next = (suggestionHighlight + 1) % suggestionList.length;
+    highlightSuggestion(next);
+
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!isOpen) return;
+    const prev = suggestionHighlight <= 0 ? suggestionList.length - 1 : suggestionHighlight - 1;
+    highlightSuggestion(prev);
+
+  } else if (e.key === 'Tab') {
+    if (isOpen) {
+      e.preventDefault();
+      if (suggestionList.length === 1) {
+        selectSuggestion(suggestionList[0]);
+      } else if (suggestionHighlight >= 0) {
+        selectSuggestion(suggestionList[suggestionHighlight]);
+      } else {
+        box.style.display = 'none';
+        suggestionList = [];
+        suggestionHighlight = -1;
+      }
+    }
+
+  } else if (e.key === 'Enter') {
+    if (isOpen && suggestionHighlight >= 0) {
+      e.preventDefault();
+      selectSuggestion(suggestionList[suggestionHighlight]);
+    } else if (isOpen && suggestionList.length === 1) {
+      e.preventDefault();
+      selectSuggestion(suggestionList[0]);
+    } else {
+      e.preventDefault();
+      box.style.display = 'none';
+      suggestionList = [];
+      suggestionHighlight = -1;
+      doSearch();
+    }
+
+  } else if (e.key === 'Escape') {
+    box.style.display = 'none';
+    suggestionList = [];
+    suggestionHighlight = -1;
+  }
 }
 
 function selectSuggestion(p) {
   document.getElementById('search-party').value = p;
   document.getElementById('suggestions').style.display = 'none';
-  // Auto-fill K/A if only one
+  suggestionList = [];
+  suggestionHighlight = -1;
   loadPartyKAAndAddr(p);
 }
 
-function hideSuggestions() { setTimeout(() => { document.getElementById('suggestions').style.display = 'none'; }, 200); }
+function hideSuggestions() {
+  setTimeout(() => {
+    document.getElementById('suggestions').style.display = 'none';
+    suggestionList = [];
+    suggestionHighlight = -1;
+  }, 200);
+}
 
 function loadPartyKAAndAddr(party) {
-  const pb = PARTY_BOOK[party] || { ka: [], addr: [] };
-
-  // K/A suggestions
+  const pb = PARTY_BOOK[party] || { ka: [], addr: [], notes: '' };
+  const ka = pb.ka || [];
   const attnInput = document.getElementById('cl-attn');
-  if (pb.ka.length === 1) {
-    attnInput.value = pb.ka[0];
+  if (ka.length === 1) {
+    attnInput.value = ka[0];
   } else {
     attnInput.value = '';
   }
-
-  // Address pills
   renderAddrPills(party);
+
+  // Show notes banner if notes exist
+  const banner = document.getElementById('party-notes-banner');
+  const notesText = document.getElementById('party-notes-text');
+  const notes = pb.notes || '';
+  if (notes) {
+    notesText.textContent = notes;
+    banner.style.display = 'flex';
+  } else {
+    banner.style.display = 'none';
+    notesText.textContent = '';
+  }
+}
+
+// ── NEW: updateAddrPreview ──
+function updateAddrPreview() {
+  const party = currentSearchParty || document.getElementById('search-party').value.trim();
+  const pb = PARTY_BOOK[party] || { ka: [], addr: [] };
+  const addr = pb.addr || [];
+  const addrSel = document.getElementById('addr-select');
+  const previewBox = document.getElementById('addr-preview-box');
+  const previewText = document.getElementById('addr-preview-text');
+
+  const selVal = addrSel.value;
+  if (selVal === '' || selVal === null || selVal === undefined || !addr.length) {
+    previewBox.classList.remove('visible');
+    previewText.textContent = '';
+    return;
+  }
+  const addrText = addr[parseInt(selVal, 10)];
+  if (!addrText) {
+    previewBox.classList.remove('visible');
+    previewText.textContent = '';
+    return;
+  }
+  previewText.textContent = addrText.replace(/\n{2,}/g, '\n').trim();
+  previewBox.classList.add('visible');
+  setTimeout(() => { previewBox.scrollTop = previewBox.scrollHeight; }, 2);
 }
 
 function renderAddrPills(party) {
   const pb = PARTY_BOOK[party] || { ka: [], addr: [] };
+  const addr = pb.addr || [];
   const pillRow = document.getElementById('addr-pills');
   const addrSel = document.getElementById('addr-select');
 
   addrSel.innerHTML = '<option value="">— select address —</option>';
-  pb.addr.forEach((a, i) => {
+  addr.forEach((a, i) => {
     const opt = document.createElement('option');
     opt.value = i;
     opt.textContent = a.split('\n')[0].substring(0, 50) + (a.length > 50 ? '…' : '');
     addrSel.appendChild(opt);
   });
 
+  // Auto-select first if only one
+  if (addr.length === 1) {
+    addrSel.value = '0';
+  }
+
   pillRow.innerHTML = '';
-  if (pb.addr.length > 1) {
-    pb.addr.forEach((a, i) => {
+  if (addr.length > 1) {
+    addr.forEach((a, i) => {
       const pill = document.createElement('span');
       pill.className = 'pill';
       pill.textContent = `Addr ${i+1}`;
-      pill.onclick = () => { addrSel.value = i; };
+      pill.onclick = () => {
+        addrSel.value = i;
+        document.querySelectorAll('#addr-pills .pill').forEach((p, pi) => p.classList.toggle('active', pi === i));
+        updateAddrPreview();
+      };
       pillRow.appendChild(pill);
     });
   }
+
+  updateAddrPreview();
 }
 
 // K/A autocomplete
@@ -986,7 +1252,8 @@ function onAttnInput() {
   const box = document.getElementById('attn-suggestions');
   if (!party || val.length < 1) { box.style.display = 'none'; return; }
   const pb = PARTY_BOOK[party] || { ka: [] };
-  const matches = pb.ka.filter(k => k.toLowerCase().includes(val.toLowerCase()));
+  const ka = pb.ka || [];
+  const matches = ka.filter(k => k.toLowerCase().includes(val.toLowerCase()));
   if (!matches.length) { box.style.display = 'none'; return; }
   box.innerHTML = matches.map(k => `<div class="suggestion-item" onmousedown="document.getElementById('cl-attn').value='${k.replace(/'/g,"\\'")}'; document.getElementById('attn-suggestions').style.display='none';">${k}</div>`).join('');
   box.style.display = 'block';
@@ -1010,9 +1277,7 @@ function doSearch() {
 
   if (!searchResults.length) { alert('No invoices found for this party / date range.'); return; }
 
-  // Use the exact party name from the DB record (not what user typed)
   currentSearchParty = searchResults[0].party;
-
   renderSearchResults();
   loadPartyKAAndAddr(currentSearchParty);
   document.getElementById('step2-block').style.display = 'block';
@@ -1030,6 +1295,10 @@ function resetAll() {
   document.getElementById('step2-block').style.display = 'none';
   document.getElementById('step3-block').style.display = 'none';
   document.getElementById('cl-attn').value = '';
+  document.getElementById('addr-preview-box').classList.remove('visible');
+  document.getElementById('addr-preview-text').textContent = '';
+  document.getElementById('party-notes-banner').style.display = 'none';
+  document.getElementById('party-notes-text').textContent = '';
 }
 
 function renderSearchResults() {
@@ -1050,7 +1319,6 @@ function renderSearchResults() {
       ? '<span class="tag tag-a">GIA</span>'
       : '<span class="tag tag-r">GIR</span>';
     const done = DONE_SET.has(r.vchNo);
-    // Pre-uncheck done invoices
     html += `<tr class="${done ? 'done-row' : ''}">
       <td class="check-col"><input type="checkbox" class="res-chk" data-idx="${i}" ${done ? '' : 'checked'} onchange="updateBadge()"></td>
       <td class="mono" style="color:var(--muted)">${i+1}</td>
@@ -1088,9 +1356,9 @@ function generatePDF() {
   const attn = document.getElementById('cl-attn').value.trim();
   const party = currentSearchParty || document.getElementById('search-party').value.trim();
 
-  // Save the K/A name if new
   if (attn && party) {
     if (!PARTY_BOOK[party]) PARTY_BOOK[party] = { ka: [], addr: [] };
+    if (!PARTY_BOOK[party].ka) PARTY_BOOK[party].ka = [];
     if (!PARTY_BOOK[party].ka.includes(attn)) {
       PARTY_BOOK[party].ka.push(attn);
       savePB();
@@ -1122,13 +1390,11 @@ function generatePDF() {
 
   doc.setFont('times','bold');
   doc.setFontSize(13);
-  doc.text('SURAJ FORWARDERS PVT LTD', 105, y, { align:'center' }); y += 6;
+  doc.text('EXIMBIZ ENTERPRISE', 105, y, { align:'center' }); y += 6;
 
   doc.setFont('times','normal');
   doc.setFontSize(9.5);
-  doc.text('A/204-205, WALL STREET II, OPP. ORIENT CLUB, NR. GUJARAT COLLEGE,', 105, y, { align:'center' }); y += 4.5;
-  doc.text('ELLIS BRIDGE, AHMEDABAD - 380006, GUJARAT', 105, y, { align:'center' }); y += 4.5;
-  doc.text('Tel: 07926402005  |  Email: account@surajforwarders.com', 105, y, { align:'center' }); y += 5;
+  doc.text('Consultancy - Shipping - Transport', 105, y, { align:'center' }); y += 4.5;
 
   doc.setLineWidth(0.5);
   doc.line(lm, y, 210 - rm, y); y += 7;
@@ -1157,7 +1423,7 @@ function generatePDF() {
   doc.setFont('times','normal');
   doc.setFontSize(11);
   doc.text('Dear Sir/Madam,', lm, y); y += 6;
-  doc.text('Enclosed please find the following documents relating to your below mentioned jobs', lm, y, { maxWidth: pw }); y += 10;
+  doc.text('SUB:    ORIGINAL INVOICE', lm, y, { maxWidth: pw }); y += 10;
 
   const tableBody = selectedRows.map((r, i) => [
     String(i+1),
@@ -1195,121 +1461,95 @@ function generatePDF() {
   doc.setFontSize(11);
   doc.text('List of Enclosures', lm, y); y += 5;
   doc.setFont('times','normal');
-  doc.text('One set of original import documents', lm, y); y += 12;
+  doc.text('Original Invoice & documents', lm, y); y += 12;
 
   doc.setFont('times','normal');
   doc.setFontSize(11);
   doc.text('Thanking You,', lm, y); y += 5;
   doc.text('Yours Faithfully,', lm, y); y += 14;
   doc.setFont('times','bold');
-  doc.text('For SURAJ FORWARDERS PVT LTD', lm, y); y += 10;
+  doc.text('For EXIMBIZ ENTERPRISE', lm, y); y += 10;
   doc.setFont('times','normal');
   doc.text('Checked by', lm, y);
 
-  // ── Mark selected invoices as done ──
   selectedRows.forEach(r => DONE_SET.add(r.vchNo));
   saveDone();
   updateStats();
-  // Remind user to save their data file
-  setTimeout(() => { if(confirm('Bills marked as done! Save your data file to PC now?')) saveDataFile(); }, 1500);
 
-  // ── Save PDF ──
   const pdfBlob = doc.output('blob');
   const blobUrl = URL.createObjectURL(pdfBlob);
 
-  // Download
   const a = document.createElement('a');
   a.href = blobUrl;
   a.download = fileName;
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
 
-  // Open in new tab
-  setTimeout(() => {
+  try {
+    const frame = document.getElementById('print-frame');
+    frame.src = blobUrl;
+    frame.onload = function() {
+      try {
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+      } catch (err) {
+        console.warn('Silent iframe print blocked by browser. Falling back to new tab.', err);
+        window.open(blobUrl, '_blank');
+      }
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
+    };
+  } catch(e) {
+    console.error('Iframe rendering failed', e);
     window.open(blobUrl, '_blank');
-  }, 500);
+  }
 
-  // Also trigger printer via iframe
-  const frame = document.getElementById('print-frame');
-  frame.src = blobUrl;
-  frame.onload = function() {
-    frame.contentWindow.focus();
-    frame.contentWindow.print();
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
-  };
-
-  // Refresh search results to reflect done status
   setTimeout(() => renderSearchResults(), 300);
 }
 
-// ── Print Address (Envelope C5 landscape) ──
-// ── Print Address (Envelope C5 landscape) ──
-// ── Print Address (Envelope C5 landscape) ──
-// ── Print Address (Envelope C5 landscape) ──
+// ── Print Address ──
 function printAddress() {
   const party = currentSearchParty || document.getElementById('search-party').value.trim();
-
   if (!party) { alert('Please search for a party first.'); return; }
 
   const pb = PARTY_BOOK[party] || { ka: [], addr: [] };
-
-  if (!pb.addr.length) {
+  const addr = pb.addr || [];
+  if (!addr.length) {
     alert('No address saved for this party.\n\nClick "Manage K/A & Addresses" button to add addresses first.');
     return;
   }
 
   const addrSel = document.getElementById('addr-select');
   const selVal = addrSel.value;
-  // selVal is "" (no selection) or "0", "1", "2"...
   let addrText;
   if (selVal === '' || selVal === null || selVal === undefined) {
-    addrText = pb.addr[0]; // default to first
+    addrText = addr[0];
   } else {
-    addrText = pb.addr[parseInt(selVal, 10)];
+    addrText = addr[parseInt(selVal, 10)];
   }
-  if (!addrText) { addrText = pb.addr[0]; }
+  if (!addrText) { addrText = addr[0]; }
   if (!addrText) { alert('Please select a valid address.'); return; }
 
-  // C5 envelope: 229mm × 162mm, landscape = 229w × 162h
   const printWin = window.open('', '_blank', 'width=900,height=700');
   printWin.document.write(`<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8">
 <title>Envelope - ${party}</title>
 <style>
-  @page {
-    size: 229mm 162mm landscape;
-    margin: 0;
-  }
+  @page { size: 229mm 162mm landscape; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    width: 229mm;
-    height: 162mm;
+    width: 229mm; height: 162mm;
     font-family: 'Times New Roman', Times, serif;
-    background: white;
-    color: #000;
-    
-    /* Center vertically, push to the right horizontally */
-    display: flex;
-    align-items: center; 
-    justify-content: flex-end; 
-    
-    /* Reduced from 30mm to 10mm to push the text much closer to the right edge */
-    padding-right: 00mm; 
+    background: white; color: #000;
+    display: flex; align-items: center; justify-content: flex-end;
+    padding-right: 00mm;
   }
-  .recipient {
-    text-align: left;
-    width: 110mm; /* Keeps the text from stretching too wide */
-  }
-  .recipient .address { 
-    font-size: 12pt; /* Set text size to 12 */
-    line-height: 1.6; 
-    white-space: pre-wrap; 
-    font-weight: bold; /* Makes it pop nicely for the post office */
-  }
+  .recipient { text-align: left; width: 110mm; }
+  .recipient .address { font-size: 12pt; line-height: 1.6; white-space: pre-wrap; font-weight: bold; }
 </style>
 </head><body>
 <div class="recipient">
-  <!-- ONLY the exact text you saved is printed here -->
   <div class="address">${addrText.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
 </div>
 <script>window.onload = function() { window.print(); }<\/script>
@@ -1322,7 +1562,6 @@ function renderPartyBook() {
   const search = document.getElementById('pb-search').value.trim().toUpperCase();
   const container = document.getElementById('party-book-list');
 
-  // Get all parties known (from DB + from party book)
   const allParties = new Set([...DB.map(r => r.party), ...Object.keys(PARTY_BOOK)]);
   const parties = [...allParties].filter(p => !search || p.toUpperCase().includes(search)).sort();
 
@@ -1331,15 +1570,20 @@ function renderPartyBook() {
     return;
   }
 
-  let html = '<div class="tbl-wrap"><table><thead><tr><th>Party Name</th><th>K/A Names</th><th>Addresses</th><th></th></tr></thead><tbody>';
+  let html = '<div class="tbl-wrap"><table><thead><tr><th>Party Name</th><th>K/A Names</th><th>Addresses</th><th>Instructions</th><th></th></tr></thead><tbody>';
   parties.forEach(p => {
-    const pb = PARTY_BOOK[p] || { ka: [], addr: [] };
-    const kaStr = pb.ka.length ? pb.ka.join(', ') : '<span style="color:var(--muted)">—</span>';
-    const addrStr = pb.addr.length ? `${pb.addr.length} address${pb.addr.length>1?'es':''}` : '<span style="color:var(--muted)">—</span>';
+    const pb = PARTY_BOOK[p] || { ka: [], addr: [], notes: '' };
+    const ka = pb.ka || [];
+    const addr = pb.addr || [];
+    const notes = pb.notes || '';
+    const kaStr = ka.length ? ka.join(', ') : '<span style="color:var(--muted)">—</span>';
+    const addrStr = addr.length ? `${addr.length} address${addr.length>1?'es':''}` : '<span style="color:var(--muted)">—</span>';
+    const notesStr = notes ? `<span style="color:var(--accent); font-size:11px;">📌 ${notes.substring(0,60)}${notes.length>60?'…':''}</span>` : '<span style="color:var(--muted)">—</span>';
     html += `<tr>
       <td class="mono">${p}</td>
-      <td style="font-size:12px; max-width:260px;">${kaStr}</td>
+      <td style="font-size:12px; max-width:200px;">${kaStr}</td>
       <td style="font-size:12px;">${addrStr}</td>
+      <td style="font-size:12px; max-width:220px;">${notesStr}</td>
       <td><button class="btn btn-outline btn-sm" onclick="openModal('${p.replace(/'/g,"\\'")}')">Edit</button></td>
     </tr>`;
   });
@@ -1347,17 +1591,18 @@ function renderPartyBook() {
   container.innerHTML = html;
 }
 
-// ── Modal for party K/A & address ──
+// ── Modal ──
 function openModal(party) {
   currentModalParty = party;
-  const pb = PARTY_BOOK[party] || { ka: [], addr: [] };
+  const pb = PARTY_BOOK[party] || { ka: [], addr: [], notes: '' };
   modalKATemp = [...(pb.ka || [])];
   modalAddrTemp = [...(pb.addr || [])];
 
   document.getElementById('modal-title').textContent = party;
-  document.getElementById('modal-sub').textContent = 'Manage Kind Attention names and mailing addresses';
+  document.getElementById('modal-sub').textContent = 'Manage Kind Attention names, addresses, and instructions';
   document.getElementById('modal-ka-input').value = '';
   document.getElementById('modal-addr-input').value = '';
+  document.getElementById('modal-notes-input').value = pb.notes || '';
 
   renderModalLists();
   document.getElementById('modal-overlay').classList.remove('hidden');
@@ -1412,9 +1657,10 @@ function removeAddrTemp(i) { modalAddrTemp.splice(i, 1); renderModalLists(); }
 
 function saveModal() {
   if (!currentModalParty) return;
-  if (!PARTY_BOOK[currentModalParty]) PARTY_BOOK[currentModalParty] = { ka: [], addr: [] };
 
-  // --- NEW: Automatically catch un-added text in the inputs ---
+  if (!PARTY_BOOK[currentModalParty])
+    PARTY_BOOK[currentModalParty] = { ka: [], addr: [], notes: '' };
+
   const pendingKA = document.getElementById('modal-ka-input').value.trim();
   if (pendingKA && !modalKATemp.includes(pendingKA)) {
     modalKATemp.push(pendingKA);
@@ -1424,15 +1670,13 @@ function saveModal() {
   if (pendingAddr) {
     modalAddrTemp.push(pendingAddr);
   }
-  // -----------------------------------------------------------
 
   PARTY_BOOK[currentModalParty].ka = [...modalKATemp];
   PARTY_BOOK[currentModalParty].addr = [...modalAddrTemp];
-  savePB();
-  // Remind user to save to PC file
-  setTimeout(() => { if(confirm('Party data updated! Click OK to save your data file to PC now (recommended).')) saveDataFile(); }, 300);
+  PARTY_BOOK[currentModalParty].notes = document.getElementById('modal-notes-input').value.trim();
 
-  // Refresh cover letter fields if this party is the currently searched one
+  savePB();
+
   if (currentSearchParty && currentSearchParty === currentModalParty) {
     loadPartyKAAndAddr(currentSearchParty);
   }
@@ -1447,7 +1691,6 @@ function closeModalDirect() {
   currentModalParty = null;
 }
 
-// Enter key to add K/A
 document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && document.getElementById('modal-ka-input') === document.activeElement) addKA();
 });
@@ -1480,7 +1723,7 @@ function numberToWords(num) {
 }
 
 // ── Init ──
-loadAll();
+loadAll().catch(e => { console.error(e); });
 </script>
 </body>
 </html>
